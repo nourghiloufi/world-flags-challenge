@@ -86,6 +86,7 @@ export default function App() {
   const nextQuestion = () => {
     if (selected) return
     if (mode==='survival') { finish(score); return }
+    if (index+1>=roundSize) { setStats(s=>({...s,played:s.played+1,best:Math.max(s.best,score)})); setScreen('result'); return }
     const next = shuffle(pool.filter(c=>c.cca2!==question?.cca2))[0]
     setQuestion(next); setOptions(makeOptions(next)); setIndex(i=>i+1); setHint(false)
   }
