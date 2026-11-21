@@ -26,7 +26,6 @@ const countryLabel = (c:Country, lang:Lang) => {
   try { return new Intl.DisplayNames([lang === 'fr' ? 'fr' : 'en'], {type:'region'}).of(c.cca2) || c.name.common } catch { return c.name.common }
 }
 const shuffle = <T,>(items:T[]) => [...items].sort(() => Math.random() - .5)
-const bestKey = 'wfc-best-v1'
 const statsKey = 'wfc-stats-v1'
 type Stats = { played:number; correct:number; answered:number; best:number }
 const initialStats:Stats = {played:0,correct:0,answered:0,best:0}
@@ -56,15 +55,22 @@ export default function App() {
     if (difficulty === 'hard') return countries
     return countries.filter(c => c.region !== 'Antarctic')
   },[difficulty])
+  const makeOptions = (target:Country, gameMode:Mode=mode) => {
+    if (gameMode === 'continent') {
+      const regions = shuffle([...new Set(countries.map(c=>c.region).filter(r=>r && r!=='Antarctic'))].filter(r=>r!==target.region)).slice(0,3)
+      return shuffle([target,...regions.map(r=>countries.find(c=>c.region===r)!).filter(Boolean)])
+    }
+    return shuffle([target,...shuffle(pool.filter(c=>c.cca2!==target.cca2)).slice(0,3)])
+  }
+  useEffect(()=>{ localStorage.setItem(statsKey,JSON.stringify(stats)) },[stats])
   const startGame = (selectedMode:Mode) => {
     setMode(selectedMode); setIndex(0); setScore(0); setStreak(0); setBestStreak(0); setSelected(null); setHint(false)
     const first = shuffle(pool)[0]
-    setQuestion(first); setOptions(shuffle([first,...shuffle(pool.filter(c=>c.cca2!==first.cca2)).slice(0,3)]))
+    setQuestion(first); setOptions(makeOptions(first,selectedMode))
     setScreen('quiz')
   }
   const finish = (finalScore:number) => {
-    const nextStats = {...stats,played:stats.played+1,correct:stats.correct+finalScore,answered:stats.answered+(mode==='survival'?index+1:roundSize),best:Math.max(stats.best,finalScore)}
-    setStats(nextStats); localStorage.setItem(statsKey,JSON.stringify(nextStats)); setScreen('result')
+    setStats(s=>({...s,played:s.played+1,best:Math.max(s.best,finalScore)})); setScreen('result')
   }
   const answer = (code:string) => {
     if (selected || !question) return
@@ -75,11 +81,11 @@ export default function App() {
     else setStreak(0)
     const nextStats = {...stats,correct:stats.correct+(isCorrect?1:0),answered:stats.answered+1}
     setStats(nextStats); localStorage.setItem(statsKey,JSON.stringify(nextStats))
-    if (mode==='survival' && !isCorrect) { setTimeout(()=>setScreen('result'),950); return }
+    if (mode==='survival' && !isCorrect) { setTimeout(()=>{setStats(s=>({...s,played:s.played+1,best:Math.max(s.best,score)}));setScreen('result')},950); return }
     if (mode!=='survival' && index+1>=roundSize) { setTimeout(()=>{ setStats(s=>({...s,played:s.played+1,best:Math.max(s.best,score+(isCorrect?1:0))})); setScreen('result') },950); return }
     setTimeout(()=>{
       const next = shuffle(pool.filter(c=>c.cca2!==question.cca2))[0]
-      setQuestion(next); setOptions(shuffle([next,...shuffle(pool.filter(c=>c.cca2!==next.cca2)).slice(0,3)]))
+      setQuestion(next); setOptions(makeOptions(next))
       setIndex(i=>i+1); setSelected(null); setHint(false)
     },850)
   }
@@ -87,7 +93,7 @@ export default function App() {
     if (selected) return
     if (mode==='survival') { finish(score); return }
     const next = shuffle(pool.filter(c=>c.cca2!==question?.cca2))[0]
-    setQuestion(next); setOptions(shuffle([next,...shuffle(pool.filter(c=>c.cca2!==next.cca2)).slice(0,3)])); setIndex(i=>i+1); setHint(false)
+    setQuestion(next); setOptions(makeOptions(next)); setIndex(i=>i+1); setHint(false)
   }
   const filteredCountries = useMemo(()=>countries.filter(c=>countryLabel(c,lang).toLowerCase().includes(filter.toLowerCase())),[filter,lang])
   useEffect(()=>{document.documentElement.lang=lang},[lang])
@@ -127,7 +133,7 @@ export default function App() {
       <div className="answers-heading"><span>CHOOSE YOUR ANSWER</span><button className="hint-button" onClick={()=>setHint(v=>!v)}><Lightbulb size={15}/>{t.hint}</button></div>
       <div className={'answers-grid'+(mode==='country'?' four-flags':'')}>{options.map(renderChoice)}</div>
       {selected && <div className={'feedback '+(correct?'feedback-correct':'feedback-wrong')}><span className="feedback-icon">{correct?<Check size={18}/>:<X size={18}/>}</span><div><strong>{correct?t.correct:t.wrong}</strong><small>{countryLabel(question,lang)}</small></div><span className="feedback-points">{correct?'+ 1 pt':'0 pt'}</span></div>}
-      <div className="quiz-footer"><span>🌍 &nbsp; Take your time. Learn as you go.</span>{!selected&&<button className="skip-button" onClick={nextQuestion}>{t.skip}<ArrowRight size={15}/></button>}{selected&&<button className="primary-button next-button" onClick={()=>{if(mode==='survival'&&selected!==question.cca2){setScreen('result')}else if(mode!=='survival'&&index+1>=roundSize){setStats(s=>({...s,played:s.played+1,best:Math.max(s.best,score)}));setScreen('result')}else{const next=shuffle(pool.filter(c=>c.cca2!==question.cca2))[0];setQuestion(next);setOptions(shuffle([next,...shuffle(pool.filter(c=>c.cca2!==next.cca2)).slice(0,3)]));setIndex(i=>i+1);setSelected(null);setHint(false)}}}>{t.next}<ArrowRight size={16}/></button>}</div>
+      <div className="quiz-footer"><span>🌍 &nbsp; Take your time. Learn as you go.</span>{!selected&&<button className="skip-button" onClick={nextQuestion}>{t.skip}<ArrowRight size={15}/></button>}{selected&&<button className="primary-button next-button" onClick={()=>{if(mode==='survival'&&selected!==question.cca2){setScreen('result')}else if(mode!=='survival'&&index+1>=roundSize){setStats(s=>({...s,played:s.played+1,best:Math.max(s.best,score)}));setScreen('result')}else{const next=shuffle(pool.filter(c=>c.cca2!==question.cca2))[0];setQuestion(next);setOptions(makeOptions(next));setIndex(i=>i+1);setSelected(null);setHint(false)}}}>{t.next}<ArrowRight size={16}/></button>}</div>
     </main>}
     {screen==='result' && <main className="result-page"><div className="result-confetti">✦　✧　✦</div><span className="eyebrow">{t.finish}</span><div className="result-medal"><Trophy size={39}/></div><h1>{mode==='survival'?t.gameOver:t.finish}</h1><p>{mode==='survival'?t.survivalDesc:'Every flag is a new story. Keep exploring!'}</p><div className="result-score"><strong>{score}</strong><span>/ {mode==='survival'?index+1:roundSize} {t.score.toLowerCase()}</span></div><div className="result-stats"><div><strong>{Math.round(score/Math.max(1,mode==='survival'?index+1:roundSize)*100)}%</strong><small>{t.accuracy}</small></div><div><strong>{bestStreak}</strong><small>{t.streak}</small></div></div>{score>=stats.best&&score>0&&<div className="new-record"><Sparkles size={16}/>{t.newBest}</div>}<button className="primary-button result-play" onClick={()=>startGame(mode)}><RotateCcw size={17}/>{t.again}<ArrowRight size={17}/></button><button className="back-link result-home" onClick={()=>setScreen('home')}>{t.home}</button></main>}
     {settings&&<div className="modal-backdrop" onClick={()=>setSettings(false)}><div className="settings-modal" onClick={e=>e.stopPropagation()}><div className="modal-heading"><div><span className="eyebrow">PERSONALIZE</span><h2>{t.settings}</h2></div><button className="icon-button" onClick={()=>setSettings(false)}><X size={19}/></button></div><label>{t.language}<select value={lang} onChange={e=>setLang(e.target.value as Lang)}><option value="en">English</option><option value="fr">Français</option></select></label><label>{t.difficulty}<select value={difficulty} onChange={e=>setDifficulty(e.target.value as typeof difficulty)}><option value="easy">{t.easy}</option><option value="medium">{t.medium}</option><option value="hard">{t.hard}</option></select></label><label>{t.roundLength}<select value={roundSize} onChange={e=>setRoundSize(Number(e.target.value))}><option value={5}>5</option><option value={10}>10</option><option value={15}>15</option><option value={20}>20</option></select></label><button className="primary-button save-settings" onClick={()=>setSettings(false)}>{t.close}<Check size={17}/></button></div></div>}
